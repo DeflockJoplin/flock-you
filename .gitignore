@@ -1,5 +1,21 @@
-.venv/
 .pio/
-.vscode/
-.DS_Store
+.venv/
 api/.venv/
+
+# PlatformIO/Arduino build & debug artifacts
+.pioenvs/
+.piolibdeps/
+
+# Cursor / VS Code
+.cursor/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db

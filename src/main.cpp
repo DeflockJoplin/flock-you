@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "esp_wifi.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 
@@ -32,6 +33,10 @@
 // - FY_HOP_DWELL_MS: dwell time per channel when hopping
 #define FY_FIXED_CHANNEL 0
 #define FY_HOP_DWELL_MS 800
+
+// Buzzer / range timing (same as colonelpanichacks/flock-you loop(): 10s heartbeat cadence, 30s idle -> reset)
+#define FY_HEARTBEAT_INTERVAL_MS 10000UL
+#define FY_INRANGE_TIMEOUT_MS 30000UL
 
 static const uint8_t FY_HOP_CHANNELS[] = {1,2,3,4,5,6,7,8,9,10,11};
 static uint8_t fyHopIdx = 0;
@@ -97,6 +102,9 @@ static SemaphoreHandle_t fyMutex = NULL;
 
 static bool fyBuzzerOn = true;
 static bool fyTriggered = false;
+static bool fyDeviceInRange = false;
+static unsigned long fyLastDetTime = 0;
+static unsigned long fyLastHB = 0;
 
 // ============================================================================
 // PROMISC EVENT QUEUE (keep WiFi RX callback minimal)
@@ -110,6 +118,18 @@ struct FYProbeHit {
 };
 
 static QueueHandle_t fyHitQueue = nullptr;
+
+// #region agent log
+// Host capture: pipe serial to /repos/flock-you/.cursor/debug-69ade4.log (see README reproduction).
+static volatile uint32_t fyAgentQueueFullISR = 0;
+
+static void fyAgentNdjson(const char* hypothesisId, const char* location, const char* message, int d1, int d2, int d3) {
+    Serial.printf(
+        "FYDBG {\"sessionId\":\"69ade4\",\"hypothesisId\":\"%s\",\"location\":\"%s\",\"message\":\"%s\","
+        "\"data\":{\"d1\":%d,\"d2\":%d,\"d3\":%d},\"timestamp\":%lu}\n",
+        hypothesisId, location, message, d1, d2, d3, (unsigned long)millis());
+}
+// #endregion
 
 // ============================================================================
 // AUDIO
@@ -145,11 +165,20 @@ static void fyBootBeep() {
 
 static void fyDetectBeep() {
     if (!fyBuzzerOn) return;
+    // Alarm crow: two sharp ascending chirps then a caw (colonelpanichacks/flock-you)
     fyCaw(400, 900, 100, 30);
     delay(60);
     fyCaw(450, 950, 100, 30);
     delay(60);
     fyCaw(900, 350, 200, 50);
+}
+
+static void fyHeartbeat() {
+    if (!fyBuzzerOn) return;
+    // Soft double coo — distant crow (colonelpanichacks/flock-you)
+    fyCaw(500, 400, 80, 20);
+    delay(120);
+    fyCaw(480, 380, 80, 20);
 }
 
 // ============================================================================
@@ -267,11 +296,6 @@ static void fyMaybeEmitDetection(int idx) {
     if (n > 0) {
         Serial.write((const uint8_t*)jsonBuf, (size_t)n);
     }
-
-    if (!fyTriggered) {
-        fyTriggered = true;
-        fyDetectBeep();
-    }
 }
 
 // ============================================================================
@@ -323,7 +347,11 @@ static void fyWifiPromiscCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
 
     BaseType_t woken = pdFALSE;
     // Callback context can be WiFi task or ISR-like; FromISR is safest.
-    xQueueSendFromISR(fyHitQueue, &hit, &woken);
+    if (xQueueSendFromISR(fyHitQueue, &hit, &woken) != pdTRUE) {
+        // #region agent log
+        fyAgentQueueFullISR++;
+        // #endregion
+    }
     if (woken) portYIELD_FROM_ISR();
 }
 
@@ -365,19 +393,61 @@ void setup() {
     fyWifiInitPromisc();
 
     printf("[FLOCK-YOU] Serial JSON output at 115200 baud\n");
+    // #region agent log
+    fyAgentNdjson("H4", "setup", "boot_reset_reason", (int)esp_reset_reason(), 0, 0);
+    // #endregion
 }
 
 void loop() {
     unsigned long now = millis();
 
-    // Drain queued hits (heavy work lives here, not in RX callback)
+    // Drain queued WiFi hits (ISR only enqueues; same role as BLE callbacks feeding state upstream)
     if (fyHitQueue) {
         FYProbeHit hit;
+        // #region agent log
+        static uint32_t sLastReportedDrops = 0;
+        uint32_t drops = fyAgentQueueFullISR;
+        if (drops != sLastReportedDrops) {
+            fyAgentNdjson("H5", "loop", "isr_queue_full_total", (int)drops, (int)(drops - sLastReportedDrops), 0);
+            sLastReportedDrops = drops;
+        }
+        // #endregion
         while (xQueueReceive(fyHitQueue, &hit, 0) == pdTRUE) {
+            unsigned long t = millis();
             char macStr[18];
             fyFormatMAC(hit.mac, macStr);
             int idx = fyAddDetection(macStr, (int)hit.rssi, (int)hit.channel, "probe_request");
             fyMaybeEmitDetection(idx);
+
+            // colonelpanichacks/flock-you: high-confidence detect -> in-range + reset HB clock; alert if !fyTriggered
+            fyDeviceInRange = true;
+            fyLastDetTime = t;
+            fyLastHB = t;
+            if (!fyTriggered) {
+                fyTriggered = true;
+                fyDetectBeep();
+                // #region agent log
+                fyAgentNdjson("H1", "loop", "detect_alert", 0, 0, 0);
+                // #endregion
+            }
+        }
+    }
+
+    // Heartbeat tracking (same structure as colonelpanichacks/flock-you loop())
+    if (fyDeviceInRange) {
+        if (millis() - fyLastHB >= FY_HEARTBEAT_INTERVAL_MS) {
+            fyHeartbeat();
+            fyLastHB = millis();
+            // #region agent log
+            fyAgentNdjson("H1", "loop", "heartbeat_play", 0, 0, 0);
+            // #endregion
+        }
+        if (millis() - fyLastDetTime >= FY_INRANGE_TIMEOUT_MS) {
+            // #region agent log
+            fyAgentNdjson("H1", "loop", "range_exit_30s", 0, 0, 0);
+            // #endregion
+            fyDeviceInRange = false;
+            fyTriggered = false;
         }
     }
 
@@ -390,6 +460,7 @@ void loop() {
             esp_wifi_set_channel(fyHopChannel, WIFI_SECOND_CHAN_NONE);
         }
     }
+    // Upstream uses delay(100) in a BLE + web loop; shorter here to drain promisc hits promptly.
     delay(10);
 }
 
