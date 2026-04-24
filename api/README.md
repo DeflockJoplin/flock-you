@@ -25,19 +25,24 @@ A Flask-based web dashboard for real-time monitoring and analysis of Flock Safet
 ## Installation
 
 ### Prerequisites
-- Python 3.8 or higher
-- USB GPS dongle (optional, for location tracking)
+- Python 3.8+ (recommended: use a virtual environment)
+- USB GPS dongle (optional, for location tracking). VK-162 confirmed working. Others that output similar GPS data should too.
 
 ### Setup
-1. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+1. **Create a virtualenv and install dependencies**:
+
+```bash
+cd api
+python3 -m venv .venv
+./.venv/bin/pip install -U pip
+./.venv/bin/pip install -r requirements.txt
+```
 
 2. **Run the application**:
-   ```bash
-   python app.py
-   ```
+
+```bash
+./.venv/bin/python flockyou.py
+```
 
 3. **Access the dashboard**:
    Open your browser and navigate to `http://localhost:5000`
@@ -81,7 +86,14 @@ A Flask-based web dashboard for real-time monitoring and analysis of Flock Safet
 
 ## Integration with Flock You Device
 
-The web dashboard is designed to receive JSON detection data from the Flock You ESP32 device. The device should send POST requests to `/api/detections` with JSON data in the following format:
+The web dashboard is designed to receive **line-delimited JSON over USB serial** from the ESP32 firmware (preferred), or POSTs to `/api/detections` if you adapt a network sender.
+
+### USB serial ingestion (recommended)
+
+1. Plug the ESP32 in via USB.
+2. In the web UI header, select the ESP32 serial port under the “Sniffer” section and click **Connect**.
+
+### Expected detection JSON schema
 
 ```json
 {
@@ -122,6 +134,14 @@ webapp/
 - Check that the correct serial port is selected
 - Verify GPS dongle is powered and has satellite fix
 - Check system permissions for serial port access
+
+On Linux, serial devices often require the `dialout` group:
+
+```bash
+sudo usermod -aG dialout "$USER"
+```
+
+Then log out and log back in.
 
 ### No Detections Displayed
 - Verify Flock You device is running and connected

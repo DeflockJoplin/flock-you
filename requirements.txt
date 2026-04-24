@@ -1,0 +1,4 @@
+# Firmware: build & flash with PlatformIO Core (CLI: platformio / pio).
+# Install into a repo-root venv — see README "Building & Flashing".
+platformio>=6.1.0,<7
+intelhex

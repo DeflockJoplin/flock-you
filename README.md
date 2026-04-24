@@ -2,63 +2,37 @@
 
 <img src="flock.png" alt="Flock You" width="300px">
 
-**Standalone BLE surveillance device detector with web dashboard, GPS wardriving, and session persistence.**
-
-Available as part of the OUI-SPY project at [colonelpanic.tech](https://colonelpanic.tech)
+**WiFi wildcard probe request detector (PC dashboard + optional GPS).**
 
 ---
 
 ## Overview
 
-Flock-You detects Flock Safety surveillance cameras, Raven gunshot detectors, and related monitoring hardware using BLE-only heuristics. It runs a WiFi access point with a live web dashboard on your phone, tags detections with GPS from your phone's browser, and exports everything as JSON, CSV, or KML for Google Earth.
+This fork/build detects devices by **WiFi wildcard probe requests** whose **source MAC OUI** matches the 30-prefix list in [`datasets/NitekryDPaul_wifi_ouis.md`](datasets/NitekryDPaul_wifi_ouis.md).
 
-No WiFi sniffing — the radio is dedicated to serving the dashboard AP while BLE scans continuously in the background via ESP32 coexistence.
+The ESP32 emits **line-delimited JSON over USB serial**, which the PC dashboard in [`api/`](api/) ingests and (optionally) tags with GPS from a USB GPS dongle.
 
 ---
 
-## Detection Methods
+## Detection logic
 
-All detection is BLE-based:
-
-| Method | Description |
-|--------|-------------|
-| **MAC prefix** | 20 known Flock Safety OUI prefixes (FS Ext Battery, Flock WiFi modules) |
-| **BLE device name** | Case-insensitive substring match: `FS Ext Battery`, `Penguin`, `Flock`, `Pigvision` |
-| **Manufacturer ID** | `0x09C8` (XUNTONG) — catches devices with no broadcast name. *From [wgreenberg/flock-you](https://github.com/wgreenberg/flock-you)* |
-| **Raven service UUID** | Identifies Raven gunshot detectors by BLE GATT service UUIDs |
-| **Raven FW estimation** | Determines firmware version (1.1.x / 1.2.x / 1.3.x) from advertised service patterns |
+- **Frame type**: 802.11 management **Probe Request**
+- **Wildcard SSID**: SSID IE (tag 0) length == 0
+- **OUI match**: transmitter/source MAC OUI is in the 30-prefix dataset
 
 ---
 
 ## Features
 
-- **WiFi AP**: `flockyou` / password `flockyou123`
-- **Web dashboard** at `192.168.4.1` — live detection feed, pattern database, export tools
-- **GPS wardriving** — phone GPS via browser Geolocation API tags every detection with coordinates
-- **Session persistence** — detections auto-save to flash (SPIFFS) every 60 seconds
-- **Prior session tab** — previous session survives reboot and is viewable in the PREV tab
-- **Export formats**: JSON, CSV, and KML (Google Earth) — current and prior sessions
-- **Serial output** — Flask-compatible JSON over serial for live desktop ingestion
-- **200 unique device storage** with FreeRTOS mutex thread safety
-- **Crow call boot sounds** — modulated descending frequency sweeps with warble texture
-- **Detection alerts** — ascending chirps + descending caw on new device detection
-- **Heartbeat** — soft double coo every 10s while a device stays in range
+- **PC dashboard**: Flask UI at `http://localhost:5000` (see [`api/`](api/))
+- **USB serial output**: JSON lines for real-time ingestion
+- **Optional GPS**: USB GPS dongle (NMEA) connected to the PC and selected in the web UI
 
 ---
 
-## Enabling GPS (Android Chrome)
+## GPS with the PC dashboard
 
-The dashboard uses your phone's GPS to geotag detections. Because it's served over HTTP, Chrome requires a one-time flag change:
-
-1. Open a new Chrome tab and go to `chrome://flags`
-2. Search for **"Insecure origins treated as secure"**
-3. Add `http://192.168.4.1` to the text field
-4. Set the flag to **Enabled**
-5. Tap **Relaunch**
-
-After relaunching, connect to the `flockyou` AP, open `192.168.4.1`, and tap the **GPS** card in the stats bar to grant location permission.
-
-> **Note:** iOS Safari does not support Geolocation over HTTP. GPS wardriving requires Android with Chrome.
+GPS is handled by the PC dashboard in [`api/`](api/). Plug in a USB GPS dongle (NMEA), then in the UI select the GPS serial port and connect.
 
 ---
 
@@ -75,21 +49,36 @@ After relaunching, connect to the `flockyou` AP, open `192.168.4.1`, and tap the
 
 ## Building & Flashing
 
-Requires [PlatformIO](https://platformio.org/).
+Firmware uses [PlatformIO Core](https://platformio.org/) (install via Python, not the VS Code extension). A repo-root virtual environment keeps PlatformIO isolated from your system Python and matches the pattern used for the Flask app in `api/`.
 
 ```bash
 cd flock-you
-pio run                     # build
-pio run -t upload           # flash
-pio device monitor          # serial output
+python3 -m venv .venv
+./.venv/bin/pip install --upgrade pip
+./.venv/bin/pip install -r requirements.txt
+
+
 ```
 
-**Dependencies** (managed by PlatformIO):
+Build, flash, and serial monitor (use the `platformio` binary from the same venv):
 
-- `NimBLE-Arduino` — BLE scanning
-- `ESP Async WebServer` + `AsyncTCP` — web dashboard
-- `ArduinoJson` — JSON serialization
-- `SPIFFS` — session persistence to flash
+```bash
+./.venv/bin/platformio run                     # build
+./.venv/bin/platformio run -t upload         # flash
+./.venv/bin/platformio device monitor        # serial output
+
+Windows powershell:
+cd flock-you
+python -m venv venv
+.\venv\Scripts\activate.ps1
+pip install -r .\requirements.txt
+pio run
+pio run -t upload
+```
+
+Alternatively, activate the venv once per shell: `source .venv/bin/activate`, then run `platformio …` without the prefix.
+
+This build is intentionally minimal and does not run a phone AP/dashboard.
 
 ---
 
@@ -99,46 +88,30 @@ The `api/` folder contains a Flask web application for desktop analysis of detec
 
 ```bash
 cd api
-pip install -r requirements.txt
-python flockyou.py
+python3 -m venv .venv
+./.venv/bin/pip install -r requirements.txt
+./.venv/bin/python flockyou.py
 ```
 
+
+
 Open `http://localhost:5000` for the desktop dashboard.
-
-**Import support:** JSON, CSV, and KML files exported from the ESP32 can be imported directly into the Flask app. Live serial ingestion is also supported — connect the ESP32 via USB and select the serial port in the Flask UI.
-
----
-
-## Raven Gunshot Detector Detection
-
-Flock-You identifies SoundThinking/ShotSpotter Raven devices through BLE service UUID fingerprinting:
-
-| Service | UUID | Description |
-|---------|------|-------------|
-| Device Info | `0000180a-...` | Serial, model, firmware |
-| GPS | `00003100-...` | Real-time coordinates |
-| Power | `00003200-...` | Battery & solar status |
-| Network | `00003300-...` | LTE/WiFi connectivity |
-| Upload | `00003400-...` | Data transmission metrics |
-| Error | `00003500-...` | Diagnostics & error logs |
-| Health (legacy) | `00001809-...` | Firmware 1.1.x |
-| Location (legacy) | `00001819-...` | Firmware 1.1.x |
-
-Firmware version is estimated automatically from which service UUIDs are advertised.
+Live serial ingestion is supported — connect the ESP32 via USB and select the serial port in the Flask UI.
 
 ---
 
 ## Acknowledgments
 
 - **Will Greenberg** ([@wgreenberg](https://github.com/wgreenberg)) — BLE manufacturer company ID detection (`0x09C8` XUNTONG) sourced from his [flock-you](https://github.com/wgreenberg/flock-you) fork
+- **ØяĐöØцяöЪöяцฐ** (@NitekryDPaul) — WiFi OUI research dataset used for probe-request OUI matching (see [`datasets/NitekryDPaul_wifi_ouis.md`](datasets/NitekryDPaul_wifi_ouis.md))
 - **[DeFlock](https://deflock.me)** ([FoggedLens/deflock](https://github.com/FoggedLens/deflock)) — crowdsourced ALPR location data and detection methodologies. Datasets included in `datasets/`
 - **[GainSec](https://github.com/GainSec)** — Raven BLE service UUID dataset (`raven_configurations.json`) enabling detection of SoundThinking/ShotSpotter acoustic surveillance devices
 
 ---
 
-## OUI-SPY Firmware Ecosystem
+## Original OUI-SPY Firmware Ecosystem
 
-Flock-You is part of the OUI-SPY firmware family:
+Flock-You is originally part of the OUI-SPY firmware family:
 
 | Firmware | Description | Board |
 |----------|-------------|-------|
@@ -152,7 +125,7 @@ Flock-You is part of the OUI-SPY firmware family:
 
 ---
 
-## Author
+## Original Author
 
 **colonelpanichacks**
 

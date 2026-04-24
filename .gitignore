@@ -1,6 +1,5 @@
-
+.venv/
 .pio/
-
 .vscode/
-
 .DS_Store
+api/.venv/
