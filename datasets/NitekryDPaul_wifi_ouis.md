@@ -2,7 +2,9 @@
 
 **Researcher:** ØяĐöØцяöЪöяцฐ (**@NitekryDPaul**)
 
-This dataset documents Flock Safety and related surveillance-infrastructure WiFi MAC-address OUIs (first three octets) discovered through 2.4 GHz promiscuous-mode analysis. All 30 prefixes below were identified by @NitekryDPaul during his promiscuous-mode research on Flock camera air traffic.
+This dataset documents Flock Safety and related surveillance-infrastructure WiFi MAC-address OUIs (first three octets) discovered through 2.4 GHz promiscuous-mode analysis.
+
+The original 30-prefix list was identified by **@NitekryDPaul** during promiscuous-mode research on Flock camera air traffic. Additional OUIs may be appended as new field observations come in (e.g., `82:6b:f2` contributed by **DeFlock Joplin**).
 
 ## Why promiscuous mode
 
@@ -10,7 +12,7 @@ Flock stations spend most of their duty cycle asleep, waking briefly to upload a
 
 This addr1 technique is @NitekryDPaul's discovery and is the basis of the `promiscuis-flock-you` firmware.
 
-## OUI list (30 prefixes, lowercase, colon-separated)
+## OUI list (31 prefixes, lowercase, colon-separated)
 
 ```
 70:c9:4e
@@ -43,6 +45,7 @@ ec:1b:bd
 64:6e:69
 48:27:ea
 a4:cf:12
+82:6b:f2
 ```
 
 ## CSV form
@@ -79,6 +82,7 @@ a4:cf:12
 | 64:6e:69 | Flock Safety infrastructure | WiFi 2.4 GHz | @NitekryDPaul |
 | 48:27:ea | Flock Safety infrastructure | WiFi 2.4 GHz | @NitekryDPaul |
 | a4:cf:12 | Flock Safety infrastructure | WiFi 2.4 GHz | @NitekryDPaul |
+| 82:6b:f2 | Flock Safety infrastructure | WiFi 2.4 GHz | DeFlock Joplin |
 
 ## Detection strategy
 

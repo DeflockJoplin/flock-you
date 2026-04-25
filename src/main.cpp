@@ -46,7 +46,7 @@ static unsigned long fyLastHop = 0;
 // ============================================================================
 // OUI LIST (authoritative upstream: colonelpanichacks/flock-you commit 6c6930b)
 // ============================================================================
-// Source: datasets/NitekryDPaul_wifi_ouis.md (30 prefixes, lowercase, colon-separated)
+// Source: datasets/NitekryDPaul_wifi_ouis.md (31 prefixes, lowercase, colon-separated)
 
 static const uint8_t fyProbeRequestOUIs[][3] = {
     {0x70, 0xc9, 0x4e},
@@ -79,6 +79,7 @@ static const uint8_t fyProbeRequestOUIs[][3] = {
     {0x64, 0x6e, 0x69},
     {0x48, 0x27, 0xea},
     {0xa4, 0xcf, 0x12},
+    {0x82, 0x6b, 0xf2},
 };
 
 // ============================================================================

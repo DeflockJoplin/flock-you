@@ -8,8 +8,8 @@
 
 ## Overview
 
-This fork/build detects devices by **WiFi wildcard probe requests** whose **source MAC OUI** matches the 30-prefix list in [`datasets/NitekryDPaul_wifi_ouis.md`](datasets/NitekryDPaul_wifi_ouis.md).  DeFlock Joplin used this data to develop
-a tighter filter using raw packet captures from Flock camera sites.  Combining NitekryDPaul's data with this research produced an accurate detection signature.  We need more data contributed from real world observations to continue to improve the filter.  Please check out the issues page for instructions on how to help with this.
+This fork/build detects devices by **WiFi wildcard probe requests** whose **source MAC OUI** matches the 31-prefix list in [`datasets/NitekryDPaul_wifi_ouis.md`](datasets/NitekryDPaul_wifi_ouis.md). DeFlock Joplin used this data to develop
+a tighter filter using raw packet captures from Flock camera sites, and contributed the latest OUI update (`82:6b:f2`). Combining NitekryDPaul's data with this research produced an accurate detection signature. We need more data contributed from real world observations to continue to improve the filter. Please check out the issues page for instructions on how to help with this.
 
 The ESP32 emits **line-delimited JSON over USB serial**, which the PC dashboard in [`api/`](api/) ingests and (optionally) tags with GPS from a USB GPS dongle.
 
@@ -19,7 +19,7 @@ The ESP32 emits **line-delimited JSON over USB serial**, which the PC dashboard 
 
 - **Frame type**: 802.11 management **Probe Request**
 - **Wildcard SSID**: SSID IE (tag 0) length == 0
-- **OUI match**: transmitter/source MAC OUI is in the 30-prefix dataset
+- **OUI match**: transmitter/source MAC OUI is in the 31-prefix dataset
 
 ---
 
